@@ -654,6 +654,87 @@ class HaxeComplete( sublime_plugin.EventListener ):
 
         self.extract_build_args( view , True , all_views )
 
+    def process_nmml(self, folder, build) :
+        # yeah...
+        if not os.path.exists( build ) :
+            return
+
+        f = codecs.open( build , "r+", "utf-8" , "ignore" )
+        raw = f.read()
+
+        if build in self.build_cache and \
+                self.build_cache[build].raw == raw:
+            currentBuild = self.build_cache[build].build
+            if currentBuild.main is not None :
+                self.add_build( currentBuild )
+            return
+
+        currentBuild = HaxeBuild()
+        currentBuild.hxml = build
+        currentBuild.nmml = build
+        currentBuild.openfl = build.endswith("xml")
+        currentBuild.lime = build.endswith("lime")
+        buildPath = os.path.dirname(build)
+
+        self.build_cache[build] = BuildCache(build, raw, currentBuild, None)
+
+        outp = "NME"
+        is_hxp = build.endswith("hxp")
+        if is_hxp:
+            currentBuild.main = 'hxp'
+            outp = 'Lime/OpenFl'
+            currentBuild.lime = True
+
+        lines = raw.splitlines()
+        for l in lines:
+            if len(l) > 200:
+                return
+            if is_hxp:
+                return
+            m = extractTag.search(l)
+            if not m is None:
+                #print(m.groups())
+                tag = m.group(1)
+                name = m.group(3)
+                if (tag == "app"):
+                    currentBuild.main = name
+                    currentBuild.args.append( ("-main" , name) )
+                    mFile = re.search("\\b(file|title)=\"([a-z0-9_-]+)\"", l, re.I)
+                    if not mFile is None:
+                        outp = mFile.group(2)
+                elif (tag == "haxelib"):
+                    currentBuild.libs.append( HaxeLib.get( name ) )
+                    currentBuild.args.append( ("-lib" , name) )
+                elif (tag == "haxedef"):
+                    currentBuild.args.append( ("-D", name) )
+                elif (tag == "classpath" or tag == "source"):
+                    currentBuild.classpaths.append( os.path.join( buildPath , name ) )
+                    currentBuild.args.append( ("-cp" , os.path.join( buildPath , name ) ) )
+            else: # NME 3.2
+                mPath = re.search("\\bpath=\"([a-z0-9_-]+)\"", l, re.I)
+                if not mPath is None:
+                    #print(mPath.groups())
+                    path = mPath.group(1)
+                    currentBuild.classpaths.append( os.path.join( buildPath , path ) )
+                    currentBuild.args.append( ("-cp" , os.path.join( buildPath , path ) ) )
+
+        outp = os.path.join( folder , outp )
+
+        if currentBuild.openfl or currentBuild.lime :
+            if self.compilerVersion >= 3 :
+                currentBuild.target = "swf"
+            else :
+                currentBuild.target = "swf9"
+
+        else :
+            currentBuild.target = "cpp"
+            currentBuild.args.append( ("--remap", "flash:nme") )
+        #currentBuild.args.append( ("-cpp", outp) )
+        currentBuild.output = outp
+        currentBuild.args.append( ("-"+currentBuild.target, outp) )
+
+        if currentBuild.main is not None :
+            self.add_build( currentBuild )
 
     def find_nmml( self, folder ) :
         nmmls = glob.glob( os.path.join( folder , "*.nmml" ) )
@@ -662,86 +743,8 @@ class HaxeComplete( sublime_plugin.EventListener ):
         nmmls += glob.glob( os.path.join( folder , "*.lime" ) )
 
         for build in nmmls:
-            # yeah...
-            if not os.path.exists( build ) :
-                continue
+            self.process_nmml(build)
 
-            f = codecs.open( build , "r+", "utf-8" , "ignore" )
-            raw = f.read()
-
-            if build in self.build_cache and \
-                    self.build_cache[build].raw == raw:
-                currentBuild = self.build_cache[build].build
-                if currentBuild.main is not None :
-                    self.add_build( currentBuild )
-                continue
-
-            currentBuild = HaxeBuild()
-            currentBuild.hxml = build
-            currentBuild.nmml = build
-            currentBuild.openfl = build.endswith("xml")
-            currentBuild.lime = build.endswith("lime")
-            buildPath = os.path.dirname(build)
-
-            self.build_cache[build] = BuildCache(build, raw, currentBuild, None)
-
-            outp = "NME"
-            is_hxp = build.endswith("hxp")
-            if is_hxp:
-                currentBuild.main = 'hxp'
-                outp = 'Lime/OpenFl'
-                currentBuild.lime = True
-
-            lines = raw.splitlines()
-            for l in lines:
-                if len(l) > 200:
-                    continue
-                if is_hxp:
-                    continue
-                m = extractTag.search(l)
-                if not m is None:
-                    #print(m.groups())
-                    tag = m.group(1)
-                    name = m.group(3)
-                    if (tag == "app"):
-                        currentBuild.main = name
-                        currentBuild.args.append( ("-main" , name) )
-                        mFile = re.search("\\b(file|title)=\"([a-z0-9_-]+)\"", l, re.I)
-                        if not mFile is None:
-                            outp = mFile.group(2)
-                    elif (tag == "haxelib"):
-                        currentBuild.libs.append( HaxeLib.get( name ) )
-                        currentBuild.args.append( ("-lib" , name) )
-                    elif (tag == "haxedef"):
-                        currentBuild.args.append( ("-D", name) )
-                    elif (tag == "classpath" or tag == "source"):
-                        currentBuild.classpaths.append( os.path.join( buildPath , name ) )
-                        currentBuild.args.append( ("-cp" , os.path.join( buildPath , name ) ) )
-                else: # NME 3.2
-                    mPath = re.search("\\bpath=\"([a-z0-9_-]+)\"", l, re.I)
-                    if not mPath is None:
-                        #print(mPath.groups())
-                        path = mPath.group(1)
-                        currentBuild.classpaths.append( os.path.join( buildPath , path ) )
-                        currentBuild.args.append( ("-cp" , os.path.join( buildPath , path ) ) )
-
-            outp = os.path.join( folder , outp )
-
-            if currentBuild.openfl or currentBuild.lime :
-                if self.compilerVersion >= 3 :
-                    currentBuild.target = "swf"
-                else :
-                    currentBuild.target = "swf9"
-
-            else :
-                currentBuild.target = "cpp"
-                currentBuild.args.append( ("--remap", "flash:nme") )
-            #currentBuild.args.append( ("-cpp", outp) )
-            currentBuild.output = outp
-            currentBuild.args.append( ("-"+currentBuild.target, outp) )
-
-            if currentBuild.main is not None :
-                self.add_build( currentBuild )
 
     def find_yaml( self, folder ) :
         yamls = glob.glob( os.path.join( folder , "flambe.yaml") )
@@ -974,6 +977,7 @@ class HaxeComplete( sublime_plugin.EventListener ):
         # extract build files from project
         build_files = view.settings().get('haxe_builds')
         if build_files is not None :
+            proj_path = ""
             for build in build_files :
                 if( int(sublime.version()) > 3000 ) and win is not None :
                     # files are relative to project file name
@@ -982,8 +986,11 @@ class HaxeComplete( sublime_plugin.EventListener ):
                         proj_path = os.path.dirname( proj )
                         build = os.path.join( proj_path , build )
 
-                for b in self.read_hxml( build ) :
-                    self.add_build( b )
+                if (build.endswith(".xml")):
+                    self.process_nmml(proj_path, build)
+                else:
+                    for b in self.read_hxml( build ) :
+                        self.add_build( b )
 
         else :
 
@@ -1919,7 +1926,7 @@ class HaxeComplete( sublime_plugin.EventListener ):
         return ( err, comps, status, hints, fields )
 
     def on_query_completions(self, view, prefix, locations):
-        
+
         scope = view.scope_name(locations[0])
         is_haxe = 'source.haxe.2' in scope
         is_hxml = 'source.hxml' in scope
