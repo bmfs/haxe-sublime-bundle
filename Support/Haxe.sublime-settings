@@ -4,6 +4,7 @@
 	"haxe_build_server_mode" : true,
 	"haxe_smart_snippets" : true,
 	"haxe_auto_complete": true,
+	"haxe_listen_server_port": false,
 
 	/*
 		Available options: outline, fill, none

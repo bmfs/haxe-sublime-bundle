@@ -1616,7 +1616,7 @@ class HaxeComplete( sublime_plugin.EventListener ):
 
         self.start_server( view )
 
-    def start_server( self , view = None ) :
+    def start_server( self , view = None ):
         #self.stop_server()
         if self.serverMode and self.serverProc is None :
             try:
@@ -1626,7 +1626,7 @@ class HaxeComplete( sublime_plugin.EventListener ):
                 if view is not None :
                     haxepath = view.settings().get("haxe_path" , "haxe")
 
-                self.serverPort+=1
+                self.serverPort += 1
                 cmd = [haxepath , "--wait" , str(self.serverPort) ]
                 print("Starting Haxe server on port "+str(self.serverPort))
 
@@ -1680,6 +1680,11 @@ class HaxeComplete( sublime_plugin.EventListener ):
 
         buildServerMode = settings.get('haxe_build_server_mode', True)
         completionServerMode = settings.get('haxe_completion_server_mode',True)
+        userServerPort = settings.get("haxe_listen_server_port", False)
+
+        serverPort = HaxeComplete.inst.serverPort
+        if (userServerPort != False):
+            serverPort = userServerPort
 
         if self.serverMode and (
                     ( completionServerMode and autocomplete ) or
@@ -1687,7 +1692,8 @@ class HaxeComplete( sublime_plugin.EventListener ):
                 ) and (
                     not display or 'serverMode' not in display or
                     display['serverMode'] ):
-            args.append(("--connect" , str(HaxeComplete.inst.serverPort)))
+            args.append(("--connect" , str(serverPort)))
+
         args.append(("--cwd" , cwd ))
         #args.append( ("--times" , "-v" ) )
 
